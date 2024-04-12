@@ -3,5 +3,7 @@ members = ["niz-core", "niz", "niz-proc-macro"]
 package = { version = "0.1.0", edition = "2021" }
 
 [workspace.dependencies]
+chrono = { version = "0.4.24" }
+serde_json = { version = "1.0.95", features = ["preserve_order"] }
 tiny-keccak = { version = "2.0", features = ["sha3"] }
-
+uuid = { version = "1.7" }

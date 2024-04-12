@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::hash::{self, Hashable};
 
@@ -51,7 +51,7 @@ where
     }
 }
 
-impl<A, B> Hashable for HashMap<A, B>
+impl<A, B> Hashable for BTreeMap<A, B>
 where
     A: Hashable,
     B: Hashable,
@@ -71,6 +71,16 @@ where
         }
         hasher.finalize(&mut output);
         output
+    }
+}
+
+impl<A, B> Hashable for HashMap<A, B>
+where
+    A: Hashable + Ord,
+    B: Hashable,
+{
+    fn hash(&self) -> [u8; 32] {
+        self.iter().collect::<BTreeMap<_, _>>().hash()
     }
 }
 
