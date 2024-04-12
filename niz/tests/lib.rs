@@ -7,6 +7,11 @@ use niz::{
 struct TestStruct {
     a: u32,
     b: u32,
+    #[allow(dead_code)]
+    #[niz(skip)]
+    c: String,
+    #[niz(json)]
+    j: String,
 }
 
 #[derive(Copy, Clone, Hashable)]
@@ -23,7 +28,12 @@ enum TestEnumDiscriminant {
 
 #[test]
 fn test_struct() {
-    let test = TestStruct { a: 1, b: 2 };
+    let test = TestStruct {
+        a: 1,
+        b: 2,
+        c: "c".to_string(),
+        j: "json_string".to_string(),
+    };
     let actual = test.hash();
 
     let mut expected = [0u8; 32];
@@ -41,6 +51,13 @@ fn test_struct() {
     let mut field_hasher = Sha3::v256();
     field_hasher.update(&hash::prefix("b"));
     field_hasher.update(&2u32.hash());
+    field_hasher.finalize(&mut field_output);
+    hasher.update(&field_output);
+
+    let mut field_output = [0u8; 32];
+    let mut field_hasher = Sha3::v256();
+    field_hasher.update(&hash::prefix("j"));
+    field_hasher.update(&"json_string".hash());
     field_hasher.finalize(&mut field_output);
     hasher.update(&field_output);
 

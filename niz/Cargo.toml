@@ -6,3 +6,6 @@ edition.workspace = true
 [dependencies]
 niz-core = { path = "../niz-core" }
 niz-proc-macro = { path = "../niz-proc-macro" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

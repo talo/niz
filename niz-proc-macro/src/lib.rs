@@ -4,7 +4,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields, Ident};
 
-#[proc_macro_derive(Hashable)]
+mod util;
+
+#[proc_macro_derive(Hashable, attributes(niz))]
 pub fn derive_hashable(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let ident = &ast.ident;
@@ -18,18 +20,36 @@ pub fn derive_hashable(input: TokenStream) -> TokenStream {
 
 fn expand_derive_hashable_for_struct(ident: &Ident, data: &DataStruct) -> TokenStream {
     let hash_fields_impl = match &data.fields {
-        Fields::Named(named) => named.named.iter().map(|field| {
-            let field_ident = field.ident.as_ref().unwrap();
-            quote! {
-                {
-                    let mut field_output = [0u8; 32];
-                    let mut field_hasher = Sha3::v256();
-                    field_hasher.update(&::niz::hash::prefix(stringify!(#field_ident)));
-                    field_hasher.update(&self.#field_ident.hash());
-                    field_hasher.finalize(&mut field_output);
-                    hasher.update(&field_output);
-                }
+        Fields::Named(named) => named.named.iter().filter_map(|field| {
+            if util::has_skip_attr(&field.attrs) {
+                return None;
             }
+
+            let field_ident = field.ident.as_ref().unwrap();
+
+            Some(if util::has_json_attr(&field.attrs) {
+                quote! {
+                    {
+                        let mut field_output = [0u8; 32];
+                        let mut field_hasher = Sha3::v256();
+                        field_hasher.update(&::niz::hash::prefix(stringify!(#field_ident)));
+                        field_hasher.update(&::serde_json::to_value(&self.#field_ident).unwrap().hash());
+                        field_hasher.finalize(&mut field_output);
+                        hasher.update(&field_output);
+                    }
+                }
+            } else {
+                quote! {
+                    {
+                        let mut field_output = [0u8; 32];
+                        let mut field_hasher = Sha3::v256();
+                        field_hasher.update(&::niz::hash::prefix(stringify!(#field_ident)));
+                        field_hasher.update(&self.#field_ident.hash());
+                        field_hasher.finalize(&mut field_output);
+                        hasher.update(&field_output);
+                    }
+                }
+            })
         }),
         _ => panic!("hashable can only be derived for structs with named fields"),
     };
