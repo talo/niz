@@ -42,6 +42,15 @@ where
     }
 }
 
+impl<T> Hashable for Vec<T>
+where
+    T: Hashable,
+{
+    fn hash(&self) -> [u8; 32] {
+        <Vec<T> as AsRef<[T]>>::as_ref(self).hash()
+    }
+}
+
 impl<A, B> Hashable for HashMap<A, B>
 where
     A: Hashable,

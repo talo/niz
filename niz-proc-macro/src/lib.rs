@@ -1,47 +1,110 @@
+use core::panic;
+
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields};
+use syn::{Data, DataEnum, DataStruct, DeriveInput, Fields, Ident};
 
 #[proc_macro_derive(Hashable)]
-pub fn derive_hasable(input: TokenStream) -> TokenStream {
+pub fn derive_hashable(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let ident = &ast.ident;
 
-    let fields_hash_impl = match &ast.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(named) => named.named.iter().map(|field| {
-                let field_ident = field.ident.as_ref().unwrap();
-                quote! {
-                    {
-                        let mut field_output = [0u8; 32];
-                        let mut field_hasher = Sha3::v256();
-                        field_hasher.update(&::niz_core::prefix(stringify!(#field_ident)));
-                        field_hasher.update(&self.#field_ident.hash());
-                        field_hasher.finalize(&mut field_output);
-                        hasher.update(&field_output);
-                    }
+    match &ast.data {
+        Data::Struct(data) => expand_derive_hashable_for_struct(ident, data),
+        Data::Enum(data) => expand_derive_hashable_for_enum(ident, data),
+        _ => panic!("hashable can only be derived for structs and enums"),
+    }
+}
+
+fn expand_derive_hashable_for_struct(ident: &Ident, data: &DataStruct) -> TokenStream {
+    let hash_fields_impl = match &data.fields {
+        Fields::Named(named) => named.named.iter().map(|field| {
+            let field_ident = field.ident.as_ref().unwrap();
+            quote! {
+                {
+                    let mut field_output = [0u8; 32];
+                    let mut field_hasher = Sha3::v256();
+                    field_hasher.update(&::niz::hash::prefix(stringify!(#field_ident)));
+                    field_hasher.update(&self.#field_ident.hash());
+                    field_hasher.finalize(&mut field_output);
+                    hasher.update(&field_output);
                 }
-            }),
-            _ => panic!("hashable can only be derived for named fields"),
-        },
-        _ => panic!("hashable can only be derived for structs"),
+            }
+        }),
+        _ => panic!("hashable can only be derived for structs with named fields"),
     };
 
     let expanded = quote! {
-        impl ::niz_core::Hashable for #ident {
+        impl ::niz::hash::Hashable for #ident {
             fn hash(&self) -> [u8; 32] {
-                use ::niz_core::tiny_keccak::{Hasher, Sha3};
-
-                let mut ty_output = [0u8; 32];
-                let mut ty_hasher = Sha3::v256();
-                ty_hasher.update(stringify!(#ident).as_bytes());
-                ty_hasher.finalize(&mut ty_output);
+                use ::niz::tiny_keccak::{Hasher, Sha3};
 
                 let mut output = [0u8; 32];
                 let mut hasher = Sha3::v256();
-                hasher.update(&ty_output);
+                hasher.update(&::niz::hash::prefix(stringify!(#ident)));
 
-                #(#fields_hash_impl)*
+                #(#hash_fields_impl)*
+
+                hasher.finalize(&mut output);
+                output
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+fn expand_derive_hashable_for_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
+    let is_enum = data
+        .variants
+        .iter()
+        .all(|variant| matches!(variant.fields, Fields::Unit));
+    if !is_enum {
+        panic!("hashable can only be derived for enums that can be cast to `u8`");
+    }
+
+    let hash_variants_impl = data.variants.iter().map(|variant| {
+        let variant_ident = &variant.ident;
+        variant.discriminant.as_ref().map_or_else(
+            || {
+                quote! {
+                    Self::#variant_ident => {
+                        let mut variant_output = [0u8; 32];
+                        let mut variant_hasher = Sha3::v256();
+                        variant_hasher.update(&::niz::hash::prefix(stringify!(#variant_ident)));
+                        variant_hasher.update(&(*self as u8).hash());
+                        variant_hasher.finalize(&mut variant_output);
+                        hasher.update(&variant_output);
+                    }
+                }
+            },
+            |(_, expr)| {
+                quote! {
+                    Self::#variant_ident => {
+                        let mut variant_output = [0u8; 32];
+                        let mut variant_hasher = Sha3::v256();
+                        variant_hasher.update(&::niz::hash::prefix(stringify!(#variant_ident)));
+                        variant_hasher.update(&(#expr).hash());
+                        variant_hasher.finalize(&mut variant_output);
+                        hasher.update(&variant_output);
+                    }
+                }
+            },
+        )
+    });
+
+    let expanded = quote! {
+        impl ::niz::hash::Hashable for #ident {
+            fn hash(&self) -> [u8; 32] {
+                use ::niz::tiny_keccak::{Hasher, Sha3};
+
+                let mut output = [0u8; 32];
+                let mut hasher = Sha3::v256();
+                hasher.update(&::niz::hash::prefix(stringify!(#ident)));
+
+                match self {
+                #(#hash_variants_impl)*
+                }
 
                 hasher.finalize(&mut output);
                 output
