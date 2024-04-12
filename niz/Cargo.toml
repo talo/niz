@@ -1,0 +1,8 @@
+[package]
+name = "niz"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+niz-core = { path = "../niz-core" }
+niz-proc-macro = { path = "../niz-proc-macro" }

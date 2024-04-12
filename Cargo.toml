@@ -1,0 +1,7 @@
+[workspace]
+members = ["niz-core", "niz", "niz-proc-macro"]
+package = { version = "0.1.0", edition = "2021" }
+
+[workspace.dependencies]
+tiny-keccak = { version = "2.0", features = ["sha3"] }
+
